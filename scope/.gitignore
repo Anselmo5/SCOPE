@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Ambiente Python
+.venv-argos/
+__pycache__/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

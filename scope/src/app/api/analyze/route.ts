@@ -1,12 +1,37 @@
-
 import { NextResponse } from "next/server";
 
-const categories = [
-  "PERFORMANCE",
-  "ACCESSIBILITY",
-  "BEST_PRACTICES",
-  "SEO",
-];
+const categories = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"];
+
+async function translateTexts(texts: string[]): Promise<string[]> {
+  try {
+    const response = await fetch("http://127.0.0.1:8000/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ texts }),
+      signal: AbortSignal.timeout(5000),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("Falha no serviço de tradução.");
+    }
+
+    const data = await response.json();
+
+    if (
+      !Array.isArray(data.translations) ||
+      data.translations.length !== texts.length
+    ) {
+      throw new Error("Resposta de tradução inválida.");
+    }
+
+    return data.translations;
+  } catch {
+    return texts;
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -50,6 +75,7 @@ export async function GET(request: Request) {
     const params = new URLSearchParams({
       url: parsedUrl.toString(),
       key: apiKey,
+      locale: "pt-BR",
     });
 
     categories.forEach((category) => {
@@ -88,15 +114,15 @@ export async function GET(request: Request) {
       seo: lighthouseCategories.seo?.score,
     };
 
-    const recommendations = Object.values(lighthouseCategories)
+    const recommendationsRaw = Object.values(lighthouseCategories)
       .flatMap((category: any) =>
         (category.auditRefs ?? [])
           .filter(
             (audit: any) =>
               audit.weight > 0 &&
-              ["numeric", "metricSavings"].includes(
+              !["numeric", "metricSavings"].includes(
                 audits[audit.id]?.details?.type,
-              ) === false &&
+              ) &&
               audits[audit.id]?.score !== null &&
               audits[audit.id]?.score < 1,
           )
@@ -114,6 +140,29 @@ export async function GET(request: Request) {
             };
           }),
       )
+      .filter(
+        (audit, index, all) =>
+          all.findIndex((item) => item.id === audit.id) === index,
+      )
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 15);
+
+    const translatedTexts = await translateTexts(
+      recommendationsRaw.flatMap((item) => [
+        item.title,
+        item.description,
+        item.category,
+      ]),
+    );
+
+    const recommendations = recommendationsRaw
+      .map((item, index) => ({
+        ...item,
+        title: translatedTexts[index * 3] ?? item.title,
+        description: translatedTexts[index * 3 + 1] ?? item.description,
+        category: translatedTexts[index * 3 + 2] ?? item.category,
+      }))
+
       .filter(
         (audit, index, all) =>
           all.findIndex((item) => item.id === audit.id) === index,
