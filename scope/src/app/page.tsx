@@ -28,6 +28,7 @@ type AnalysisResult = {
 export default function Home() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [analyzedUrl, setAnalyzedUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<AnalysisResult | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -37,6 +38,7 @@ export default function Home() {
 
     setError("");
     setResults(null);
+    setAnalyzedUrl("");
     setRecommendations([]);
     setLoading(true);
 
@@ -72,6 +74,10 @@ export default function Home() {
         },
       });
 
+      setAnalyzedUrl(
+        typeof data.url === "string" ? data.url : url,
+      );
+
       setRecommendations(data.recommendations ?? []);
     } catch (err) {
       setError(
@@ -82,25 +88,29 @@ export default function Home() {
     }
   }
 
+
   const categories = results ? Object.values(results) : [];
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <a href="/" className={styles.logo}>
-          <span className={styles.logoIcon}>S</span>
+        <a href="/" className={styles.logo} aria-label="SCOPE — página inicial">
+          <span className={styles.logoIcon} aria-hidden="true">
+            S
+          </span>
           SCOPE
         </a>
+
         <span className={styles.headerLabel}>Website Intelligence</span>
       </header>
 
-      <section className={styles.hero}>
+      <section className={styles.hero} aria-labelledby="hero-title">
         <span className={styles.eyebrow}>
-          <span className={styles.statusDot} />
+          <span className={styles.statusDot} aria-hidden="true" />
           ANÁLISE INTELIGENTE DE WEBSITES
         </span>
 
-        <h1>
+        <h1 id="hero-title">
           Seu site tem o desempenho
           <br />
           que você <span>imagina?</span>
@@ -111,7 +121,11 @@ export default function Home() {
           dados técnicos em melhorias reais para o seu site.
         </p>
 
-        <form className={styles.searchForm} onSubmit={handleSubmit}>
+        <form
+          className={styles.searchForm}
+          onSubmit={handleSubmit}
+          aria-busy={loading}
+        >
           <label htmlFor="website-url" className={styles.srOnly}>
             URL do site que deseja analisar
           </label>
@@ -122,11 +136,17 @@ export default function Home() {
 
           <input
             id="website-url"
+            name="url"
             type="url"
             placeholder="https://seusite.com"
+            autoComplete="url"
             required
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            aria-invalid={Boolean(error)}
+            aria-describedby={
+              error ? "analysis-error" : "analysis-status"
+            }
           />
 
           <button type="submit" disabled={loading}>
@@ -135,9 +155,23 @@ export default function Home() {
           </button>
         </form>
 
-        {error && <p className={styles.error}>{error}</p>}
+        {error && (
+          <p
+            id="analysis-error"
+            className={styles.error}
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
 
-        <p className={styles.helper}>
+        <p
+          id="analysis-status"
+          className={styles.helper}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           {loading
             ? "Estamos analisando o site. Isso pode levar alguns segundos."
             : "Análise de desempenho baseada em dados reais."}
@@ -145,42 +179,64 @@ export default function Home() {
       </section>
 
       {results && (
-        <section className={styles.results} aria-live="polite">
+        <section
+          className={styles.results}
+          aria-labelledby="results-title"
+          aria-live="polite"
+          aria-busy={loading}
+        >
           <div className={styles.resultsHeader}>
             <div>
               <span className={styles.eyebrow}>RELATÓRIO DO SITE</span>
-              <h2>Resultado da análise</h2>
+              <h2 id="results-title">Resultado da análise</h2>
             </div>
-            <p className={styles.analyzedUrl}>{url}</p>
+
+            <p className={styles.analyzedUrl}>
+              {analyzedUrl}
+            </p>
           </div>
 
           <div className={styles.resultsGrid}>
             {categories.map((category) => (
               <article className={styles.resultCard} key={category.title}>
-                <span className={styles.resultTitle}>{category.title}</span>
+                <span className={styles.resultTitle}>
+                  {category.title}
+                </span>
+
                 <strong className={styles.resultScore}>
-                  {Math.round(category.score)}
+                  {category.score === null
+                    ? "—"
+                    : Math.round(category.score)}
                   <span>/100</span>
                 </strong>
-                <div
-                  className={styles.scoreTrack}
-                  role="progressbar"
-                  aria-label={category.title}
-                  aria-valuenow={Math.round(category.score)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                >
+
+                {category.score !== null ? (
                   <div
-                    className={styles.scoreFill}
-                    style={{ width: `${category.score}%` }}
-                  />
-                </div>
+                    className={styles.scoreTrack}
+                    role="progressbar"
+                    aria-label={`Pontuação de ${category.title}`}
+                    aria-valuenow={Math.round(category.score)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuetext={`${Math.round(category.score)} de 100`}
+                  >
+                    <div
+                      className={styles.scoreFill}
+                      style={{ width: `${category.score}%` }}
+                    />
+                  </div>
+                ) : (
+                  <p role="status">Pontuação indisponível.</p>
+                )}
+
                 <span className={styles.scoreLabel}>
-                  {category.score >= 90
-                    ? "Bom"
-                    : category.score >= 50
-                      ? "Precisa melhorar"
-                      : "Ruim"}
+                  {category.score === null
+                    ? "Indisponível"
+                    : category.score >= 90
+                      ? "Bom"
+                      : category.score >= 50
+                        ? "Precisa melhorar"
+                        : "Ruim"}
                 </span>
               </article>
             ))}
@@ -189,15 +245,20 @@ export default function Home() {
       )}
 
       {results && (
-        <section className={styles.recommendations} aria-live="polite">
+        <section
+          className={styles.recommendations}
+          aria-labelledby="recommendations-title"
+        >
           <div className={styles.recommendationsHeader}>
             <span className={styles.eyebrow}>PRÓXIMOS PASSOS</span>
-            <h2>O que pode melhorar?</h2>
-            <p>Oportunidades identificadas durante a análise do seu site.</p>
+            <h2 id="recommendations-title">O que pode melhorar?</h2>
+            <p>
+              Oportunidades identificadas durante a análise do seu site.
+            </p>
           </div>
 
           {recommendations.length === 0 ? (
-            <p className={styles.emptyRecommendations}>
+            <p className={styles.emptyRecommendations} role="status">
               Nenhuma oportunidade de melhoria foi encontrada nas auditorias
               selecionadas.
             </p>
@@ -209,6 +270,7 @@ export default function Home() {
                     <span className={styles.recommendationCategory}>
                       {item.category}
                     </span>
+
                     <span className={styles.recommendationScore}>
                       {item.score === 0 ? "Não aprovado" : "Pode melhorar"}
                     </span>
@@ -229,9 +291,11 @@ export default function Home() {
         </section>
       )}
 
-      <section className={styles.features}>
+      <section className={styles.features} aria-label="Recursos do SCOPE">
         <article className={styles.feature}>
-          <span className={styles.featureNumber}>01</span>
+          <span className={styles.featureNumber} aria-hidden="true">
+            01
+          </span>
           <h2>Desempenho</h2>
           <p>
             Entenda a velocidade de carregamento e a experiência de quem visita
@@ -240,7 +304,9 @@ export default function Home() {
         </article>
 
         <article className={styles.feature}>
-          <span className={styles.featureNumber}>02</span>
+          <span className={styles.featureNumber} aria-hidden="true">
+            02
+          </span>
           <h2>Acessibilidade</h2>
           <p>
             Identifique barreiras que dificultam o acesso ao conteúdo por
@@ -249,7 +315,9 @@ export default function Home() {
         </article>
 
         <article className={styles.feature}>
-          <span className={styles.featureNumber}>03</span>
+          <span className={styles.featureNumber} aria-hidden="true">
+            03
+          </span>
           <h2>SEO e boas práticas</h2>
           <p>
             Descubra oportunidades para melhorar a estrutura e a qualidade

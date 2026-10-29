@@ -2,6 +2,37 @@ import { NextResponse } from "next/server";
 
 const categories = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"];
 
+function getFriendlyError(message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("failed_document_request") ||
+    normalized.includes("err_failed") ||
+    normalized.includes("unable to reliably load") ||
+    normalized.includes("lighthouse") ||
+    normalized.includes("navigation")
+  ) {
+    return "Não foi possível analisar este site. Verifique se o endereço está correto e se o site está disponível para acesso público.";
+  }
+
+  if (
+    normalized.includes("quota") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("too many requests")
+  ) {
+    return "O limite de análises foi atingido. Aguarde um pouco e tente novamente.";
+  }
+
+  if (
+    normalized.includes("invalid url") ||
+    normalized.includes("invalid argument")
+  ) {
+    return "O endereço informado não é válido. Confira a URL e tente novamente.";
+  }
+
+  return "Não foi possível analisar este site no momento. Tente novamente mais tarde.";
+}
+
 function protectTechnicalTerms(text: string) {
   const replacements: string[] = [];
   let protectedText = text;
@@ -12,13 +43,11 @@ function protectTechnicalTerms(text: string) {
     return token;
   };
 
-  // Preserva links Markdown completos para não quebrar suas URLs.
   protectedText = protectedText.replace(
     /\[[^\]]+\]\(https?:\/\/[^)\s]+(?:\s+"[^"]*")?\)/g,
     protect,
   );
 
-  // Preserva URLs que aparecem fora de links Markdown.
   protectedText = protectedText.replace(/https?:\/\/[^\s)<>"']+/g, protect);
 
   return { protectedText, replacements };
@@ -126,10 +155,15 @@ export async function GET(request: Request) {
     const data = await response.json();
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: data.error?.message ?? "Falha ao analisar o site." },
-        { status: response.status },
-      );
+      const message =
+        typeof data.error?.message === "string" ? data.error.message : "";
+
+      const friendlyMessage = getFriendlyError(message);
+
+      const status =
+        response.status >= 400 && response.status < 600 ? response.status : 502;
+
+      return NextResponse.json({ error: friendlyMessage }, { status });
     }
 
     const lighthouse = data.lighthouseResult;
