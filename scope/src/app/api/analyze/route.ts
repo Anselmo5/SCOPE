@@ -2,14 +2,48 @@ import { NextResponse } from "next/server";
 
 const categories = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"];
 
+function protectTechnicalTerms(text: string) {
+  const replacements: string[] = [];
+  let protectedText = text;
+
+  const protect = (value: string) => {
+    const token = `ZXQSCOPEKEEP${replacements.length}QXZ`;
+    replacements.push(value);
+    return token;
+  };
+
+  // Preserva links Markdown completos para não quebrar suas URLs.
+  protectedText = protectedText.replace(
+    /\[[^\]]+\]\(https?:\/\/[^)\s]+(?:\s+"[^"]*")?\)/g,
+    protect,
+  );
+
+  // Preserva URLs que aparecem fora de links Markdown.
+  protectedText = protectedText.replace(/https?:\/\/[^\s)<>"']+/g, protect);
+
+  return { protectedText, replacements };
+}
+
+function restoreProtectedTerms(text: string, replacements: string[]) {
+  return replacements.reduce(
+    (result, replacement, index) =>
+      result.replaceAll(`ZXQSCOPEKEEP${index}QXZ`, replacement),
+    text,
+  );
+}
+
 async function translateTexts(texts: string[]): Promise<string[]> {
   try {
+    const protectedItems = texts.map(protectTechnicalTerms);
+
     const response = await fetch("http://127.0.0.1:8000/translate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ texts }),
+      body: JSON.stringify({
+        texts: protectedItems.map((item) => item.protectedText),
+      }),
       signal: AbortSignal.timeout(5000),
       cache: "no-store",
     });
@@ -27,7 +61,9 @@ async function translateTexts(texts: string[]): Promise<string[]> {
       throw new Error("Resposta de tradução inválida.");
     }
 
-    return data.translations;
+    return data.translations.map((translation: string, index: number) =>
+      restoreProtectedTerms(translation, protectedItems[index].replacements),
+    );
   } catch {
     return texts;
   }
